@@ -24,18 +24,6 @@ export function TabBar({
         >
           MDX
         </TabButton>
-        <TabButton
-          isActive={activeTab === 'css'}
-          onClick={() => onChange('css')}
-        >
-          CSS
-        </TabButton>
-        <TabButton
-          isActive={activeTab === 'config'}
-          onClick={() => onChange('config')}
-        >
-          Config
-        </TabButton>
         {showPreviewTab && (
           <TabButton
             isActive={activeTab === 'preview'}
