@@ -1,6 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  startTransition,
+} from 'react'
 import { useIsomorphicLayoutEffect } from '../hooks/useIsomorphicLayoutEffect'
-import { debounce } from 'debounce'
 import { Editor } from './Editor'
 import SplitPane from 'react-split-pane'
 import Count from 'word-count'
@@ -28,8 +33,19 @@ const TAB_BAR_HEIGHT = 40
 const RESIZER_SIZE = 1
 const DEFAULT_RESPONSIVE_SIZE = { width: 360, height: 720 }
 
+const defaultTheme = {
+  markdownTheme: 'default',
+  codeTheme: 'default',
+  isMac: true,
+  formatMarkdown: false,
+}
+
+function handleUnload(e) {
+  e.preventDefault()
+  e.returnValue = ''
+}
+
 export default function Pen({
-  initialTheme,
   initialContent,
   initialPath,
   initialLayout,
@@ -37,7 +53,7 @@ export default function Pen({
   initialActiveTab,
 }) {
   const htmlRef = useRef()
-  const previewRef = useRef()
+  const previewRef = useRef<any>(null!)
   const [size, setSize] = useState({ percentage: 0.5, layout: initialLayout })
   const [resizing, setResizing] = useState(false)
   const [activeTab, setActiveTab] = useState(initialActiveTab)
@@ -49,18 +65,14 @@ export default function Pen({
   const [renderEditor, setRenderEditor] = useState(false)
   const [error, setError, setErrorImmediate, cancelSetError] =
     useDebouncedState(undefined, 1000)
-  const editorRef = useRef()
+  const editorRef = useRef<any>(null!)
   const [responsiveDesignMode, setResponsiveDesignMode] = useState(
     initialResponsiveSize ? true : false
   )
   const [shouldClearOnUpdate, setShouldClearOnUpdate] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [wordCount, setWordCount] = useState(0)
-  const [theme, setTheme] = useLocalStorage('editor-theme', {
-    markdownTheme: 'default',
-    codeTheme: 'default',
-    isMac: true,
-  })
+  const [theme, setTheme] = useLocalStorage('editor-theme', defaultTheme)
   const [responsiveSize, setResponsiveSize] = useState(
     initialResponsiveSize || DEFAULT_RESPONSIVE_SIZE
   )
@@ -77,10 +89,6 @@ export default function Pen({
 
   useEffect(() => {
     if (dirty) {
-      function handleUnload(e) {
-        e.preventDefault()
-        e.returnValue = ''
-      }
       window.addEventListener('beforeunload', handleUnload)
       return () => {
         window.removeEventListener('beforeunload', handleUnload)
@@ -114,59 +122,67 @@ export default function Pen({
     previewRef.current.contentWindow.postMessage(content, '*')
   }, [])
 
-  async function compileNow(content) {
-    cancelSetError()
-    localStorage.setItem(
-      initialContent.ID || 'content',
-      JSON.stringify(content)
-    )
-    setIsLoading(true)
-    compileMdx(
-      content.config,
-      content.html,
-      theme.isMac,
-      theme.codeTheme,
-      theme.formatMarkdown
-    ).then((res) => {
-      if (res.err) {
-        setError(res.err)
-      } else {
-        setErrorImmediate()
-      }
-      if (res.html) {
-        const { html } = res
-        const { css } = content
-        if (css || html) {
-          //编译后的html保存到ref 中
-          htmlRef.current = html
-          inject({
-            css:
-              baseCss +
-              themes[theme.markdownTheme].css +
-              codeThemes[theme.codeTheme].css +
-              css,
-            html,
-            codeTheme: theme.codeTheme,
-          })
+  const compileNow = useCallback(
+    async function (content) {
+      cancelSetError()
+      localStorage.setItem(
+        initialContent.ID || 'content',
+        JSON.stringify(content)
+      )
+      setIsLoading(true)
+      compileMdx(
+        theme
+          ? {
+              mdx: content.html,
+              ...theme,
+            }
+          : {
+              mdx: content.html,
+              ...defaultTheme,
+            }
+      ).then((res) => {
+        if (res.err) {
+          setError(res.err)
+        } else {
+          setErrorImmediate()
         }
-      }
-      setWordCount(Count(content.html || ''))
-      setIsLoading(false)
-    })
-  }
-
-  const compile = useCallback(debounce(compileNow, 200), [theme])
+        if (res.html) {
+          const { html } = res
+          const { css } = content
+          if (css || html) {
+            //编译后的html保存到ref 中
+            htmlRef.current = html
+            inject({
+              css:
+                baseCss +
+                themes[theme?.markdownTheme].css +
+                codeThemes[theme?.codeTheme].css +
+                css,
+              html,
+              codeTheme: theme?.codeTheme,
+            })
+          }
+        }
+        setWordCount(Count(content.html || ''))
+        setIsLoading(false)
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme]
+  )
 
   const onChange = useCallback(
     (document, content) => {
       setDirty(true)
-      compile({
-        html: content.html,
-        css: content.css,
-        config: content.config,
+      startTransition(() => {
+        compileNow({
+          html: content.html,
+          css: content.css,
+          config: content.config,
+        })
       })
     },
-    [compile]
+    [compileNow]
   )
 
   useIsomorphicLayoutEffect(() => {
@@ -239,6 +255,7 @@ export default function Pen({
         size.layout === 'vertical' ? 'cursor-ew-resize' : 'cursor-ns-resize'
       )
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resizing])
 
   const updateCurrentSize = useCallback((newSize) => {
@@ -268,6 +285,7 @@ export default function Pen({
         setShouldClearOnUpdate(true)
       })
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [size.layout, responsiveDesignMode, responsiveSize]
   )
 
