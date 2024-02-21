@@ -321,7 +321,7 @@ export const Preview = forwardRef(function Page(
                       text-align: justify;
                       font-size: 17px;
                       color: #333;
-                      padding:20px 16px 9px;
+                      padding:0px 8px;
                     }
                     body * {
                       box-sizing: border-box;

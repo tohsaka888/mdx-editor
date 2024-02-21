@@ -1,4 +1,4 @@
-import '../css/main.css'
+import '../src/css/main.css'
 import 'prismjs/themes/prism-okaidia.css'
 import Head from 'next/head'
 import { Analytics } from '@vercel/analytics/react'
@@ -9,7 +9,7 @@ const DESCRIPTION =
 const FAVICON_VERSION = 3
 
 if (typeof window !== 'undefined') {
-  require('../workers/subworkers')
+  require('../src/workers/subworkers')
 }
 
 function v(href) {

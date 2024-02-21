@@ -7,7 +7,7 @@ import React, {
 } from 'react'
 import { useIsomorphicLayoutEffect } from '../hooks/useIsomorphicLayoutEffect'
 import { Editor } from './Editor'
-import SplitPane from 'react-split-pane'
+import SplitPane, { Size } from 'react-split-pane'
 import Count from 'word-count'
 import useMedia from 'react-use/lib/useMedia'
 import useLocalStorage from 'react-use/lib/useLocalStorage'
@@ -25,6 +25,7 @@ import { themes } from '../css/markdown-body'
 import { compileMdx } from '../hooks/compileMdx'
 import { baseCss, codeThemes } from '../css/mdx'
 import { PenSquare, Columns, MonitorSmartphone, Square } from 'lucide-react'
+import { Editor as MonacoEditor } from '@monaco-editor/react'
 
 import clsx from 'clsx'
 
@@ -32,6 +33,10 @@ const HEADER_HEIGHT = 60 - 1
 const TAB_BAR_HEIGHT = 40
 const RESIZER_SIZE = 1
 const DEFAULT_RESPONSIVE_SIZE = { width: 360, height: 720 }
+
+if (typeof window !== 'undefined') {
+  require('../workers/subworkers')
+}
 
 const defaultTheme = {
   markdownTheme: 'default',
@@ -45,16 +50,33 @@ function handleUnload(e) {
   e.returnValue = ''
 }
 
+type Props = {
+  initialContent: string
+  initialPath?: string
+  initialLayout: string
+  initialResponsiveSize?: {
+    width: string | number
+    height: string | number
+  }
+  initialActiveTab?: string
+}
+
 export default function Pen({
   initialContent,
   initialPath,
   initialLayout,
   initialResponsiveSize,
   initialActiveTab,
-}) {
+}: Props) {
   const htmlRef = useRef()
   const previewRef = useRef<any>(null!)
-  const [size, setSize] = useState({ percentage: 0.5, layout: initialLayout })
+  const [size, setSize] = useState<{
+    percentage: number
+    layout: string
+    current?: any
+    min?: Size
+    max?: Size
+  }>({ percentage: 0.5, layout: initialLayout })
   const [resizing, setResizing] = useState(false)
   const [activeTab, setActiveTab] = useState(initialActiveTab)
   const [activePane, setActivePane] = useState(
@@ -82,8 +104,8 @@ export default function Pen({
   }, [
     activeTab,
     size.layout,
-    responsiveSize.width,
-    responsiveSize.height,
+    responsiveSize?.width,
+    responsiveSize?.height,
     responsiveDesignMode,
   ])
 
@@ -109,35 +131,29 @@ export default function Pen({
         },
         '*'
       )
-      inject({ html: initialContent.html })
-      compileNow({
-        html: initialContent.html,
-        css: initialContent.css,
-        config: initialContent.config,
-      })
+      inject({ html: initialContent })
+      compileNow(initialContent)
     }
-  }, [initialContent.ID])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialContent])
 
   const inject = useCallback(async (content) => {
     previewRef.current.contentWindow.postMessage(content, '*')
   }, [])
 
   const compileNow = useCallback(
-    async function (content) {
+    async function (content: string) {
       cancelSetError()
-      localStorage.setItem(
-        initialContent.ID || 'content',
-        JSON.stringify(content)
-      )
+      localStorage.setItem('content', JSON.stringify(content))
       setIsLoading(true)
       compileMdx(
         theme
           ? {
-              mdx: content.html,
+              mdx: content,
               ...theme,
             }
           : {
-              mdx: content.html,
+              mdx: content,
               ...defaultTheme,
             }
       ).then((res) => {
@@ -148,41 +164,25 @@ export default function Pen({
         }
         if (res.html) {
           const { html } = res
-          const { css } = content
-          if (css || html) {
+          if (html) {
             //编译后的html保存到ref 中
             htmlRef.current = html
             inject({
               css:
                 baseCss +
                 themes[theme?.markdownTheme].css +
-                codeThemes[theme?.codeTheme].css +
-                css,
+                codeThemes[theme?.codeTheme].css,
               html,
               codeTheme: theme?.codeTheme,
             })
           }
         }
-        setWordCount(Count(content.html || ''))
+        setWordCount(Count(content || ''))
         setIsLoading(false)
       })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme]
-  )
-
-  const onChange = useCallback(
-    (document, content) => {
-      setDirty(true)
-      startTransition(() => {
-        compileNow({
-          html: content.html,
-          css: content.css,
-          config: content.config,
-        })
-      })
-    },
-    [compileNow]
   )
 
   useIsomorphicLayoutEffect(() => {
@@ -291,12 +291,9 @@ export default function Pen({
 
   useEffect(() => {
     if (editorRef.current) {
-      compileNow({
-        html: editorRef.current.getValue('html'),
-        css: editorRef.current.getValue('css'),
-        config: editorRef.current.getValue('config'),
-      })
+      compileNow(editorRef.current.getValue('html'))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme])
 
   // initial state resets
@@ -310,16 +307,6 @@ export default function Pen({
   useEffect(() => {
     setActiveTab(initialActiveTab)
   }, [initialActiveTab])
-
-  // useEffect(() => {
-  //   const handleMessage = (e) => {
-  //     if (e.data.event === 'preview-scroll') {
-  //       console.log(e.data)
-  //       editorRef.current.editor.revealLine(e.data.line)
-  //     }
-  //   }
-  //   window.addEventListener('message', handleMessage, false)
-  // }, [])
 
   return (
     <>
@@ -414,8 +401,8 @@ export default function Pen({
             htmlRef={htmlRef}
             baseCss={
               baseCss +
-              themes[theme.markdownTheme].css +
-              codeThemes[theme.codeTheme].css
+              themes[theme?.markdownTheme].css +
+              codeThemes[theme?.codeTheme].css
             }
             editorRef={editorRef}
             previewRef={previewRef}
@@ -425,27 +412,7 @@ export default function Pen({
       <main className="flex-auto relative border-t border-gray-200 dark:border-gray-800">
         {initialContent && typeof size.current !== 'undefined' ? (
           <>
-            {(!isLg || size.layout !== 'preview') && (
-              <TabBar
-                width={
-                  size.layout === 'vertical' && isLg ? size.current : '100%'
-                }
-                isLoading={isLoading}
-                wordCount={wordCount}
-                showPreviewTab={!isLg}
-                activeTab={
-                  isLg || activePane === 'editor' ? activeTab : 'preview'
-                }
-                onChange={(tab) => {
-                  if (tab === 'preview') {
-                    setActivePane('preview')
-                  } else {
-                    setActivePane('editor')
-                    setActiveTab(tab)
-                  }
-                }}
-              />
-            )}
+            {/* @ts-ignore */}
             <SplitPane
               split={size.layout === 'horizontal' ? 'horizontal' : 'vertical'}
               minSize={size.min}
@@ -457,48 +424,60 @@ export default function Pen({
               onDragStarted={() => setResizing(true)}
               onDragFinished={() => setResizing(false)}
               allowResize={isLg && size.layout !== 'preview'}
+              style={{ height: 'calc(100vh - 68px)' }}
               resizerClassName={
                 isLg && size.layout !== 'preview'
                   ? 'Resizer'
                   : 'Resizer-collapsed'
               }
             >
-              <div className="border-t border-gray-200 dark:border-white/10 mt-12 flex-auto flex">
-                {renderEditor && (
-                  <Editor
-                    editorRef={(ref) => (editorRef.current = ref)}
-                    initialContent={initialContent}
-                    onChange={onChange}
-                    onScroll={(line) => {
-                      inject({ line })
-                    }}
-                    activeTab={activeTab}
-                  />
-                )}
-              </div>
-              <div className="absolute inset-0 w-full md:h-full top-12 lg:top-0 border-t border-gray-200 dark:border-white/10 lg:border-0 bg-gray-50 dark:bg-black">
-                <Preview
-                  ref={previewRef}
-                  responsiveDesignMode={
-                    size.layout !== 'editor' && isLg && responsiveDesignMode
-                  }
-                  responsiveSize={responsiveSize}
-                  onChangeResponsiveSize={setResponsiveSize}
-                  iframeClassName={resizing ? 'pointer-events-none' : ''}
-                  onLoad={() => {
-                    inject({
-                      html: initialContent.html,
+              {renderEditor && (
+                // @ts-ignore
+                // <Editor
+                //   editorRef={(ref) => (editorRef.current = ref)}
+                //   initialContent={initialContent}
+                //   onChange={onChange}
+                //   onScroll={(line) => {
+                //     inject({ line })
+                //   }}
+                //   activeTab={activeTab}
+                // />
+                <MonacoEditor
+                  height={'100vh'}
+                  defaultValue={initialContent}
+                  language="mdx"
+                  onMount={(editor) => {
+                    editorRef.current = editor
+                    editor.onDidScrollChange((e) => {
+                      console.log(e)
                     })
-                    compileNow({
-                      css: initialContent.css,
-                      config: initialContent.config,
-                      html: initialContent.html,
-                      ID: initialContent.ID,
+                  }}
+                  onChange={(md) => {
+                    setDirty(true)
+                    startTransition(() => {
+                      compileNow(md!)
                     })
                   }}
                 />
-                <ErrorOverlay value={theme} onChange={setTheme} error={error} />
-              </div>
+              )}
+
+              <Preview
+                ref={previewRef}
+                // @ts-ignore
+                responsiveDesignMode={
+                  size.layout !== 'editor' && isLg && responsiveDesignMode
+                }
+                responsiveSize={responsiveSize}
+                onChangeResponsiveSize={setResponsiveSize}
+                iframeClassName={resizing ? 'pointer-events-none' : ''}
+                onLoad={() => {
+                  inject({
+                    html: initialContent,
+                  })
+                  compileNow(initialContent)
+                }}
+              />
+              <ErrorOverlay value={theme} onChange={setTheme} error={error} />
             </SplitPane>
           </>
         ) : null}

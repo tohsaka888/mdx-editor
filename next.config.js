@@ -46,7 +46,7 @@ module.exports = {
             r.issuer.and.length === 1 &&
             r.issuer.and[0].source &&
             r.issuer.and[0].source.replace(/\\/g, '') ===
-              path.resolve(process.cwd(), 'src/pages/_app')
+              path.resolve(process.cwd(), 'pages/_app')
           ) {
             r.issuer.or = [
               ...r.issuer.and,

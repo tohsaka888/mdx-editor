@@ -8,7 +8,6 @@ export async function getDefaultContent() {
   const html = defaultContent
   const css = `.list-card {
   margin: 0 auto;
-  margin-top: 30px;
   margin-bottom: 15px;
   max-width: 320px;
   background: #ffffff;
