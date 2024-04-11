@@ -6,7 +6,6 @@ import React, {
   startTransition,
 } from 'react'
 import { useIsomorphicLayoutEffect } from '../hooks/useIsomorphicLayoutEffect'
-import { Editor } from './Editor'
 import SplitPane, { Size } from 'react-split-pane'
 import Count from 'word-count'
 import useMedia from 'react-use/lib/useMedia'
@@ -20,7 +19,6 @@ import { Button } from '@/components/ui/button'
 import { Share } from './Share'
 import { CopyBtn } from './Copy'
 import ThemeDropdown from './ThemeDropdown'
-import { TabBar } from './TabBar'
 import { themes } from '../css/markdown-body'
 import { compileMdx } from '../hooks/compileMdx'
 import { baseCss, codeThemes } from '../css/mdx'
@@ -92,8 +90,6 @@ export default function Pen({
     initialResponsiveSize ? true : false
   )
   const [shouldClearOnUpdate, setShouldClearOnUpdate] = useState(true)
-  const [isLoading, setIsLoading] = useState(false)
-  const [wordCount, setWordCount] = useState(0)
   const [theme, setTheme] = useLocalStorage('editor-theme', defaultTheme)
   const [responsiveSize, setResponsiveSize] = useState(
     initialResponsiveSize || DEFAULT_RESPONSIVE_SIZE
@@ -145,7 +141,6 @@ export default function Pen({
     async function (content: string) {
       cancelSetError()
       localStorage.setItem('content', JSON.stringify(content))
-      setIsLoading(true)
       compileMdx(
         theme
           ? {
@@ -177,11 +172,9 @@ export default function Pen({
             })
           }
         }
-        setWordCount(Count(content || ''))
-        setIsLoading(false)
       })
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps 123
     [theme]
   )
 
