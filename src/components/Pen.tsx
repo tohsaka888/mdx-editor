@@ -168,7 +168,7 @@ export default function Pen({
                 themes[theme?.markdownTheme].css +
                 codeThemes[theme?.codeTheme].css,
               html,
-              codeTheme: theme?.codeTheme,
+              codeTheme: theme?.codeTheme
             })
           }
         }
